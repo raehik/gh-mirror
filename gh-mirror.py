@@ -22,7 +22,7 @@ def update_repo(repo_name, dl_url, outdir):
     if os.path.isdir(repo_dir):
         # folder exists: assume it's already been cloned & we just have to pull
         log("repo: update/fetch: {}".format(repo_name))
-        subprocess.call(["git", "fetch"], cwd=repo_dir)
+        subprocess.call(["git", "pull"], cwd=repo_dir)
     else:
         # no repo, do a git clone
         log("repo: new/clone: {}".format(repo_name))
