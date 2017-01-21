@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 #
-# Clone all a user's public GitHub repositories.
+# Clone all of a user's public & private GitHub repositories.
 #
 
 import sys
@@ -13,22 +13,6 @@ import time
 
 PROTOCOL = "https://"
 GH_API_ROOT = PROTOCOL + "api.github.com"
-GH_API_REPOS = "user/repos"
-
-sleep_time = 60*60*24    # 1 day
-
-def update_repo(repo_name, dl_url, outdir):
-    repo_dir = os.path.join(outdir, repo_name)
-    if os.path.isdir(repo_dir):
-        # folder exists: assume it's already been cloned & we just have to pull
-        log("repo: update/fetch: {}".format(repo_name))
-        subprocess.call(["git", "pull"], cwd=repo_dir)
-    else:
-        # no repo, do a git clone
-        log("repo: new/clone: {}".format(repo_name))
-        subprocess.call(["git", "clone", dl_url, repo_dir])
-
-
 
 FILENAME = sys.argv[0]
 
@@ -67,15 +51,27 @@ def error(message, exit_code=None):
     if exit_code:
         sys.exit(exit_code)
 
-
+"""Try to update (pull/clone) a repo."""
+def update_repo(repo_name, dl_url, outdir):
+    repo_dir = os.path.join(outdir, repo_name)
+    if os.path.isdir(repo_dir):
+        # folder exists: assume it's already been cloned & we just have to pull
+        log("repo: update/fetch: {}".format(repo_name))
+        subprocess.call(["git", "pull"], cwd=repo_dir)
+    else:
+        # no repo, do a git clone
+        log("repo: new/clone: {}".format(repo_name))
+        subprocess.call(["git", "clone", dl_url, repo_dir])
 
 parser = ArgumentParserUsage(description="Description of the program's function (identical if you'd like).")
 
 # add arguments
+parser.add_argument("-u", "--user",
+        help="get specified user's repos instead of the OAuth user's ones")
 parser.add_argument("-v", "--verbose", help="be verbose",
-                    action="store_true")
+        action="store_true")
 parser.add_argument("-o", "--output-directory",
-                    help="directory to store repos in")
+        help="directory to store repos in")
 parser.add_argument("token", help="OAuth token for user")
 
 # parse arguments
@@ -90,34 +86,35 @@ else:
 
 auth_header = { "Authorization": "token {}".format(args.token) }
 
-while True:
-    repos = []
-    more_pages = True
-    next_repos_url = "{}/{}".format(GH_API_ROOT,GH_API_REPOS)
-    page_num = 1
-    while more_pages:
-        log("downloading page number {}...".format(page_num))
-        req = requests.get(next_repos_url, headers=auth_header)
+if args.user:
+    # TODO: unneat
+    next_repos_user_selection = "{}/{}/{}".format("users", args.user, "repos")
+else:
+    next_repos_user_selection = "{}/{}".format("user", "repos")
 
-        # make sure we were able to get the page fine
-        if not req.ok:
-            error("GitHub API request failed", 1)
+# retrieve names/URLs of all repos
+repos = []
+more_pages = True
+next_repos_url = "{}/{}".format(GH_API_ROOT, next_repos_user_selection)
+page_num = 1
+while more_pages:
+    log("downloading page number {}...".format(page_num))
+    req = requests.get(next_repos_url, headers=auth_header)
 
-        req_json = json.loads(req.text)
-        repos.extend(req_json)
-        if "next" in req.links:
-            next_repos_url = req.links["next"]["url"]
-            page_num += 1
-        else:
-            more_pages = False
+    # make sure we were able to get the page fine
+    if not req.ok:
+        error("GitHub API request failed", 1)
 
-    for repo in repos:
-        update_repo(repo["full_name"], repo["clone_url"].replace(
+    log("continuing...")
+    req_json = json.loads(req.text)
+    repos.extend(req_json)
+    log("continuing #2...")
+    if "next" in req.links:
+        next_repos_url = req.links["next"]["url"]
+        page_num += 1
+    else:
+        more_pages = False
+
+for repo in repos:
+    update_repo(repo["full_name"], repo["clone_url"].replace(
             PROTOCOL, PROTOCOL + args.token + "@"), outdir)
-
-    log("Sleeping for {} seconds...".format(sleep_time))
-    try:
-        time.sleep(sleep_time)
-    except KeyboardInterrupt:
-        log_message("Ctrl-c pressed while sleeping, exiting with 0...")
-        sys.exit(0)
