@@ -105,10 +105,8 @@ while more_pages:
     if not req.ok:
         error("GitHub API request failed", 1)
 
-    log("continuing...")
     req_json = json.loads(req.text)
     repos.extend(req_json)
-    log("continuing #2...")
     if "next" in req.links:
         next_repos_url = req.links["next"]["url"]
         page_num += 1
